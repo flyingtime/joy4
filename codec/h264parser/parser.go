@@ -1,12 +1,12 @@
-
 package h264parser
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/nareix/joy4/av"
 	"github.com/nareix/joy4/utils/bits"
 	"github.com/nareix/joy4/utils/bits/pio"
-	"fmt"
-	"bytes"
 )
 
 const (
@@ -135,7 +135,7 @@ Annex B is commonly used in live and streaming formats such as transport streams
 2. AVCC
 The other common method of storing an H.264 stream is the AVCC format. In this format, each NALU is preceded with its length (in big endian format). This method is easier to parse, but you lose the byte alignment features of Annex B. Just to complicate things, the length may be encoded using 1, 2 or 4 bytes. This value is stored in a header object. This header is often called ‘extradata’ or ‘sequence header’. Its basic format is as follows:
 
-bits    
+bits
 8   version ( always 0x01 )
 8   avc profile ( sps[0][1] )
 8   avc compatibility ( sps[0][2] )
@@ -203,8 +203,8 @@ Additionally, there is a new variable called NALULengthSizeMinusOne. This confus
 An advantage to this format is the ability to configure the decoder at the start and jump into the middle of a stream. This is a common use case where the media is available on a random access medium such as a hard drive, and is therefore used in common container formats such as MP4 and MKV.
 */
 
-var StartCodeBytes = []byte{0,0,1}
-var AUDBytes = []byte{0,0,0,1,0x9,0xf0,0,0,0,1} // AUD
+var StartCodeBytes = []byte{0, 0, 1}
+var AUDBytes = []byte{0, 0, 0, 1, 0x9, 0xf0, 0, 0, 0, 1} // AUD
 
 func CheckNALUsType(b []byte) (typ int) {
 	_, typ = SplitNALUs(b)
@@ -301,13 +301,13 @@ type SPSInfo struct {
 	MbWidth  uint
 	MbHeight uint
 
-	CropLeft   uint
-	CropRight  uint
-	CropTop    uint
-	CropBottom uint
+	CropLeft    uint
+	CropRight   uint
+	CropTop     uint
+	CropBottom  uint
 	UnitsInTick uint
-    TimeScale uint
-    FixedRate uint
+	TimeScale   uint
+	FixedRate   uint
 
 	Width  uint
 	Height uint
@@ -315,7 +315,6 @@ type SPSInfo struct {
 
 func ParseSPS(data []byte) (self SPSInfo, err error) {
 	r := &bits.GolombBitReader{R: bytes.NewReader(data)}
-
 
 	if _, err = r.ReadBits(8); err != nil {
 		return
@@ -502,17 +501,17 @@ func ParseSPS(data []byte) (self SPSInfo, err error) {
 
 	self.Width = (self.MbWidth * 16) - self.CropLeft*2 - self.CropRight*2
 	self.Height = ((2 - frame_mbs_only_flag) * self.MbHeight * 16) - self.CropTop*2 - self.CropBottom*2
-	
-	var vui_parameters_present_flag  uint
+
+	var vui_parameters_present_flag uint
 	if vui_parameters_present_flag, err = r.ReadBit(); err != nil {
 		return
 	}
 
-	if (vui_parameters_present_flag != 0) {
+	if vui_parameters_present_flag != 0 {
 		/*
-		aspect_ratio_info_present_flag equal to 1 specifies that
-		aspect_ratio_idc is present. aspect_ratio_info_present_flag
-		equal to 0 specifies that aspect_ratio_idc is not present.
+			aspect_ratio_info_present_flag equal to 1 specifies that
+			aspect_ratio_idc is present. aspect_ratio_info_present_flag
+			equal to 0 specifies that aspect_ratio_idc is not present.
 		*/
 		var aspect_ratio_info_present_flag uint
 		if aspect_ratio_info_present_flag, err = r.ReadBit(); err != nil {
@@ -521,117 +520,117 @@ func ParseSPS(data []byte) (self SPSInfo, err error) {
 
 		if aspect_ratio_info_present_flag != 0 {
 			/*
-			aspect_ratio_idc specifies the value of the sample aspect
-			ratio of the luma samples. Table E-1 shows the meaning of
-			the code. When aspect_ratio_idc indicates Extended_SAR, the
-			sample aspect ratio is represented by sar_width and
-			sar_height. When the aspect_ratio_idc syntax element is not
-			present, aspect_ratio_idc value shall be inferred to be
-			equal to 0.
+				aspect_ratio_idc specifies the value of the sample aspect
+				ratio of the luma samples. Table E-1 shows the meaning of
+				the code. When aspect_ratio_idc indicates Extended_SAR, the
+				sample aspect ratio is represented by sar_width and
+				sar_height. When the aspect_ratio_idc syntax element is not
+				present, aspect_ratio_idc value shall be inferred to be
+				equal to 0.
 			*/
 			var aspect_ratio_idc uint
 			if aspect_ratio_idc, err = r.ReadBits(8); err != nil {
 				return
 			}
 
-			switch aspect_ratio_idc {		
+			switch aspect_ratio_idc {
 			case 0:
 				// Unspecified
-				break;
+				break
 			case 1:
 				// 1:1
 				/*
-				1280x720 16:9 frame without overscan
-				1920x1080 16:9 frame without overscan (cropped from 1920x1088)
-				640x480 4:3 frame without overscan
+					1280x720 16:9 frame without overscan
+					1920x1080 16:9 frame without overscan (cropped from 1920x1088)
+					640x480 4:3 frame without overscan
 				*/
-				break;
+				break
 			case 2:
 				// 12:11
 				/*
-				720x576 4:3 frame with horizontal overscan
-				352x288 4:3 frame without overscan
+					720x576 4:3 frame with horizontal overscan
+					352x288 4:3 frame without overscan
 				*/
-				break;
+				break
 			case 3:
 				// 10:11
 				/*
-				720x480 4:3 frame with horizontal overscan
-				352x240 4:3 frame without overscan
+					720x480 4:3 frame with horizontal overscan
+					352x240 4:3 frame without overscan
 				*/
-				break;
+				break
 			case 4:
 				// 16:11
 				/*
-				720x576 16:9 frame with horizontal overscan
-				540x576 4:3 frame with horizontal overscan
+					720x576 16:9 frame with horizontal overscan
+					540x576 4:3 frame with horizontal overscan
 				*/
-				break;
+				break
 			case 5:
 				// 40:33
 				/*
-				720x480 16:9 frame with horizontal overscan
-				540x480 4:3 frame with horizontal overscan
+					720x480 16:9 frame with horizontal overscan
+					540x480 4:3 frame with horizontal overscan
 				*/
-				break;
+				break
 			case 6:
 				// 24:11
 				/*
-				352x576 4:3 frame without overscan
-				540x576 16:9 frame with horizontal overscan
+					352x576 4:3 frame without overscan
+					540x576 16:9 frame with horizontal overscan
 				*/
-				break;
+				break
 			case 7:
 				// 20:11
 				/*
-				352x480 4:3 frame without overscan
-				480x480 16:9 frame with horizontal overscan
+					352x480 4:3 frame without overscan
+					480x480 16:9 frame with horizontal overscan
 				*/
-				break;
+				break
 			case 8:
 				// 32:11
 				/*
-				352x576 16:9 frame without overscan
+					352x576 16:9 frame without overscan
 				*/
-				break;
+				break
 			case 9:
 				// 80:33
 				/*
-				352x480 16:9 frame without overscan
+					352x480 16:9 frame without overscan
 				*/
-				break;
+				break
 			case 10:
 				// 18:11
 				/*
-				480x576 4:3 frame with horizontal overscan
+					480x576 4:3 frame with horizontal overscan
 				*/
-				break;
+				break
 			case 11:
 				// 15:11
 				/*
-				480x480 4:3 frame with horizontal overscan
+					480x480 4:3 frame with horizontal overscan
 				*/
-				break;
+				break
 			case 12:
 				// 64:33
 				/*
-				540x576 16:9 frame with horizontal overscan
+					540x576 16:9 frame with horizontal overscan
 				*/
-				break;
+				break
 			case 13:
 				// 160:99
 				/*
-				540x576 16:9 frame with horizontal overscan
+					540x576 16:9 frame with horizontal overscan
 				*/
-				break;
+				break
 			case EXTENDED_SAR:
-				if _, err  = r.ReadBits(16); err != nil {
-					return
-				}	
 				if _, err = r.ReadBits(16); err != nil {
 					return
 				}
-				break;
+				if _, err = r.ReadBits(16); err != nil {
+					return
+				}
+				break
 			}
 		}
 
@@ -641,10 +640,10 @@ func ParseSPS(data []byte) (self SPSInfo, err error) {
 		}
 
 		if overscan_info_present_flag != 0 {
-			//overscan_appropriate_flag	
+			//overscan_appropriate_flag
 			if _, err = r.ReadBit(); err != nil {
 				return
-			} 	
+			}
 		}
 
 		var video_signal_type_present_flag uint
@@ -653,29 +652,29 @@ func ParseSPS(data []byte) (self SPSInfo, err error) {
 		}
 
 		if video_signal_type_present_flag != 0 { //video_signal_type_present_flag
-			if _, err = r.ReadBits(3); err != nil {//video_format
+			if _, err = r.ReadBits(3); err != nil { //video_format
 				return
 			}
 
-			if _, err = r.ReadBit(); err != nil {//video_full_range_flag
+			if _, err = r.ReadBit(); err != nil { //video_full_range_flag
 				return
-			} 
-			  
+			}
+
 			var colour_description_present_flag uint
 			if colour_description_present_flag, err = r.ReadBit(); err != nil {
 				return
 			}
 
 			if colour_description_present_flag != 0 {
-				if _, err = r.ReadBits(8); err != nil {// colour_primaries
+				if _, err = r.ReadBits(8); err != nil { // colour_primaries
 					return
 				}
 
-				if _, err = r.ReadBits(8); err != nil {// transfer_characteristics
+				if _, err = r.ReadBits(8); err != nil { // transfer_characteristics
 					return
 				}
 
-				if _, err = r.ReadBits(8); err != nil {// matrix_coefficients
+				if _, err = r.ReadBits(8); err != nil { // matrix_coefficients
 					return
 				}
 			}
@@ -687,7 +686,7 @@ func ParseSPS(data []byte) (self SPSInfo, err error) {
 		}
 
 		if chroma_loc_info_present_flag != 0 {
-		
+
 			r.ReadExponentialGolombCode() //chroma_sample_loc_type_top_field ue(v)
 			r.ReadExponentialGolombCode() //chroma_sample_loc_type_bottom_field ue(v)
 		}
@@ -698,7 +697,7 @@ func ParseSPS(data []byte) (self SPSInfo, err error) {
 		}
 
 		if timing_info_present_flag != 0 {
-		    //num_units_in_tick
+			//num_units_in_tick
 			if self.UnitsInTick, err = r.ReadBits(32); err != nil {
 				return
 			}
@@ -708,10 +707,10 @@ func ParseSPS(data []byte) (self SPSInfo, err error) {
 				return
 			}
 
-			//fixed_frame_rate_flag 
+			//fixed_frame_rate_flag
 			if self.FixedRate, err = r.ReadBit(); err != nil {
 				return
-			} 
+			}
 		}
 	}
 
@@ -719,9 +718,9 @@ func ParseSPS(data []byte) (self SPSInfo, err error) {
 }
 
 type CodecData struct {
-	Record []byte
+	Record     []byte
 	RecordInfo AVCDecoderConfRecord
-	SPSInfo SPSInfo
+	SPSInfo    SPSInfo
 }
 
 func (self CodecData) Type() av.CodecType {
@@ -809,8 +808,8 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 	self.AVCProfileIndication = b[1]
 	self.ProfileCompatibility = b[2]
 	self.AVCLevelIndication = b[3]
-	self.LengthSizeMinusOne = b[4]&0x03
-	spscount := int(b[5]&0x1f)
+	self.LengthSizeMinusOne = b[4] & 0x03
+	spscount := int(b[5] & 0x1f)
 	n += 6
 
 	for i := 0; i < spscount; i++ {
@@ -858,10 +857,10 @@ func (self *AVCDecoderConfRecord) Unmarshal(b []byte) (n int, err error) {
 func (self AVCDecoderConfRecord) Len() (n int) {
 	n = 7
 	for _, sps := range self.SPS {
-		n += 2+len(sps)
+		n += 2 + len(sps)
 	}
 	for _, pps := range self.PPS {
-		n += 2+len(pps)
+		n += 2 + len(pps)
 	}
 	return
 }
@@ -871,8 +870,8 @@ func (self AVCDecoderConfRecord) Marshal(b []byte) (n int) {
 	b[1] = self.AVCProfileIndication
 	b[2] = self.ProfileCompatibility
 	b[3] = self.AVCLevelIndication
-	b[4] = self.LengthSizeMinusOne|0xfc
-	b[5] = uint8(len(self.SPS))|0xe0
+	b[4] = self.LengthSizeMinusOne | 0xfc
+	b[5] = uint8(len(self.SPS)) | 0xe0
 	n += 6
 
 	for _, sps := range self.SPS {
@@ -910,7 +909,7 @@ func (self SliceType) String() string {
 }
 
 const (
-	SLICE_P = iota+1
+	SLICE_P = iota + 1
 	SLICE_B
 	SLICE_I
 )
@@ -922,9 +921,9 @@ func ParseSliceHeaderFromNALU(packet []byte) (sliceType SliceType, err error) {
 		return
 	}
 
-	nal_unit_type := packet[0]&0x1f
+	nal_unit_type := packet[0] & 0x1f
 	switch nal_unit_type {
-	case 1,2,5,19:
+	case 1, 2, 5, 19:
 		// slice_layer_without_partitioning_rbsp
 		// slice_data_partition_a_layer_rbsp
 
@@ -947,11 +946,11 @@ func ParseSliceHeaderFromNALU(packet []byte) (sliceType SliceType, err error) {
 	}
 
 	switch u {
-	case 0,3,5,8:
+	case 0, 3, 5, 8:
 		sliceType = SLICE_P
-	case 1,6:
+	case 1, 6:
 		sliceType = SLICE_B
-	case 2,4,7,9:
+	case 2, 4, 7, 9:
 		sliceType = SLICE_I
 	default:
 		err = fmt.Errorf("h264parser: slice_type=%d invalid", u)
@@ -960,4 +959,3 @@ func ParseSliceHeaderFromNALU(packet []byte) (sliceType SliceType, err error) {
 
 	return
 }
-

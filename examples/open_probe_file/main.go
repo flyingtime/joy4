@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/nareix/joy4/av"
 	"github.com/nareix/joy4/av/avutil"
-	"github.com/nareix/joy4/format"
 	"github.com/nareix/joy4/codec/h264parser"
+	"github.com/nareix/joy4/format"
 )
 
 func init() {
@@ -14,23 +15,27 @@ func init() {
 
 func frameRate(info h264parser.SPSInfo) float64 {
 	var num uint64
-    var fps float64
+	var fps float64
 
-    num   = 500 * uint64(info.TimeScale) /* 1000 * 0.5 */
+	num = 500 * uint64(info.TimeScale) /* 1000 * 0.5 */
 
 	if info.UnitsInTick != 0 {
 		fps = (float64(num) / float64(info.UnitsInTick)) / 1000
 	}
 
-    return fps;
+	return fps
 }
 
 func main() {
-	file, _ := avutil.Open("/tmp/sintel.flv")
+	file, _ := avutil.Open("/Users/mac/Documents/reflv/doc/demo/demo.flv")
 
 	if file == nil {
-		fmt.Println("could not open input file")		
+		fmt.Println("could not open input file")
+		return
 	}
+
+	defer file.Close()
+
 	streams, _ := file.Streams()
 	for _, stream := range streams {
 		if stream.Type().IsAudio() {
@@ -62,19 +67,16 @@ func main() {
 			if typ == 7 {
 				// Try to parse out the SPS header.
 				if info, err := h264parser.ParseSPS(nalUnit); err == nil {
-					fmt.Println("SPSInfo", 
+					fmt.Println("SPSInfo",
 						frameRate(info),
 						info.UnitsInTick,
 						info.TimeScale,
 						info.FixedRate,
-						info.Width)					
+						info.Width)
 				}
 			}
 		}
 
 		fmt.Println("pkt", i, streams[pkt.Idx].Type(), "len", len(pkt.Data), "keyframe", pkt.IsKeyFrame)
 	}
-
-	file.Close()
 }
-
