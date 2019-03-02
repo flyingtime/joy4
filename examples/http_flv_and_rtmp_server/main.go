@@ -14,9 +14,11 @@ import (
 	"github.com/nareix/joy4/format/flv"
 	"github.com/nareix/joy4/format/rtmp"
 	"github.com/nareix/joy4/format/rtsp"
+	_ "github.com/nareix/joy4/pprof"
 )
 
 func init() {
+	//rtmp.Debug = true
 	format.RegisterAll()
 }
 
@@ -39,6 +41,8 @@ func main() {
 	channels := &sync.Map{}
 
 	server.HandlePlay = func(conn *rtmp.Conn) {
+		log.Printf("play:%s\n", conn.URL.Path)
+
 		if _ch, ok := channels.Load(conn.URL.Path); ok {
 			ch := _ch.(*Channel)
 			cursor := ch.que.Latest()
@@ -47,19 +51,18 @@ func main() {
 	}
 
 	server.HandlePublish = func(conn *rtmp.Conn) {
+
+		log.Printf("publish:%s\n", conn.URL.Path)
 		streams, _ := conn.Streams()
 
 		ch := &Channel{}
 		ch.que = pubsub.NewQueue()
 		ch.que.WriteHeader(streams)
 
-		_ch, ok := channels.LoadOrStore(conn.URL.Path, ch)
+		_, ok := channels.LoadOrStore(conn.URL.Path, ch)
 		if ok {
-			ch = _ch.(*Channel)
-			ch = nil
-		}
-
-		if ch == nil {
+			log.Printf("exsit %s\n", conn.URL.Path)
+			conn.Close()
 			return
 		}
 
@@ -71,6 +74,8 @@ func main() {
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
 		_path := strings.TrimSuffix(r.URL.Path, ".flv")
 
 		var ch *Channel
@@ -84,7 +89,6 @@ func main() {
 		if ch != nil {
 			w.Header().Set("Content-Type", "video/x-flv")
 			w.Header().Set("Transfer-Encoding", "chunked")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.WriteHeader(200)
 			flusher := w.(http.Flusher)
 			flusher.Flush()
@@ -98,10 +102,10 @@ func main() {
 		}
 	})
 
-	go http.ListenAndServe(":8089", nil)
+	go http.ListenAndServe(":7001", nil)
 
 	go func() {
-		rt, err := rtsp.Dial("rtsp://admin:a12345678@192.168.0.78:554/h265/ch1/main/av_stream")
+		rt, err := rtmp.Dial("rtmp://ossrs.net:1935/live/livestream")
 		if err != nil {
 			log.Println(err)
 		}
@@ -110,7 +114,29 @@ func main() {
 			log.Println(err)
 		}
 
-		demuxer := &pktque.FilterDemuxer{Demuxer: rt, Filter: &pktque.Walltime{}}
+		demuxer := &pktque.FilterDemuxer{Demuxer: rt, Filter: &pktque.WaitKeyFrame{}}
+		avutil.CopyFile(rm, demuxer)
+
+		rt.Close()
+		rm.Close()
+	}()
+
+	go func() {
+		rt, err := rtsp.Dial("rtsp://admin:123456abc@192.168.1.64:554/h264/ch1/main/av_stream")
+		if err != nil {
+			log.Println(err)
+		}
+		rm, err := rtmp.Dial("rtmp://localhost/live/test1")
+		if err != nil {
+			log.Println(err)
+		}
+
+		filters := pktque.Filters{}
+		filters = append(filters, &pktque.WaitKeyFrame{})
+		//filters = append(filters, &pktque.FrameDropper{DelaySkip: 100})
+		//filters = append(filters, &pktque.FixTime{MakeIncrement: true})
+
+		demuxer := &pktque.FilterDemuxer{Demuxer: rt, Filter: filters}
 		avutil.CopyFile(rm, demuxer)
 
 		rt.Close()

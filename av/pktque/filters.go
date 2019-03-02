@@ -1,9 +1,9 @@
-
 // Package pktque provides packet Filter interface and structures used by other components.
 package pktque
 
 import (
 	"time"
+
 	"github.com/nareix/joy4/av"
 )
 
@@ -30,8 +30,8 @@ func (self Filters) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoid
 // Wrap origin Demuxer and Filter into a new Demuxer, when read this Demuxer filters will be called.
 type FilterDemuxer struct {
 	av.Demuxer
-	Filter Filter
-	streams []av.CodecData
+	Filter   Filter
+	streams  []av.CodecData
 	videoidx int
 	audioidx int
 }
@@ -79,11 +79,67 @@ func (self *WaitKeyFrame) ModifyPacket(pkt *av.Packet, streams []av.CodecData, v
 	return
 }
 
+type FrameDropper struct {
+	Interval     int
+	n            int
+	skipping     bool
+	DelaySkip    time.Duration
+	lasttime     time.Time
+	lastpkttime  time.Duration
+	delay        time.Duration
+	SkipInterval int
+}
+
+func (self *FrameDropper) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
+	if self.DelaySkip != 0 && pkt.Idx == int8(videoidx) {
+		now := time.Now()
+		if !self.lasttime.IsZero() {
+			realdiff := now.Sub(self.lasttime)
+			pktdiff := pkt.Time - self.lastpkttime
+			self.delay += realdiff - pktdiff
+		}
+		self.lasttime = time.Now()
+		self.lastpkttime = pkt.Time
+
+		if !self.skipping {
+			if self.delay > self.DelaySkip {
+				self.skipping = true
+				self.delay = 0
+			}
+		} else {
+			if pkt.IsKeyFrame {
+				self.skipping = false
+			}
+		}
+		if self.skipping {
+			drop = true
+		}
+
+		if self.SkipInterval != 0 && pkt.IsKeyFrame {
+			if self.n == self.SkipInterval {
+				self.n = 0
+				self.skipping = true
+			}
+			self.n++
+		}
+	}
+
+	if self.Interval != 0 {
+		if self.n >= self.Interval && pkt.Idx == int8(videoidx) && !pkt.IsKeyFrame {
+			drop = true
+			self.n = 0
+		}
+		self.n++
+	}
+
+	return
+}
+
 // Fix incorrect packet timestamps.
 type FixTime struct {
-	zerobase time.Duration
-	incrbase time.Duration
-	lasttime time.Duration
+	zerobase      time.Duration
+	incrbase      time.Duration
+	lasttime      time.Duration
 	StartFromZero bool // make timestamp start from zero
 	MakeIncrement bool // force timestamp increment
 }
@@ -114,14 +170,14 @@ func (self *FixTime) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoi
 // Drop incorrect packets to make A/V sync.
 type AVSync struct {
 	MaxTimeDiff time.Duration
-	time []time.Duration
+	time        []time.Duration
 }
 
 func (self *AVSync) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
 	if self.time == nil {
 		self.time = make([]time.Duration, len(streams))
 		if self.MaxTimeDiff == 0 {
-			self.MaxTimeDiff = time.Millisecond*500
+			self.MaxTimeDiff = time.Millisecond * 500
 		}
 	}
 
@@ -188,4 +244,3 @@ func (self *Walltime) ModifyPacket(pkt *av.Packet, streams []av.CodecData, video
 	}
 	return
 }
-
