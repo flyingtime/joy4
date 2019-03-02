@@ -519,116 +519,6 @@ func (self MovieHeader) Children() (r []Atom) {
 	return
 }
 
-type Track struct {
-	Header   *TrackHeader
-	Media    *Media
-	Unknowns []Atom
-	AtomPos
-}
-
-func (self Track) Marshal(b []byte) (n int) {
-	pio.PutU32BE(b[4:], uint32(TRAK))
-	n += self.marshal(b[8:]) + 8
-	pio.PutU32BE(b[0:], uint32(n))
-	return
-}
-func (self Track) marshal(b []byte) (n int) {
-	if self.Header != nil {
-		n += self.Header.Marshal(b[n:])
-	}
-	if self.Media != nil {
-		n += self.Media.Marshal(b[n:])
-	}
-	if self.Edit != nil {
-		n += self.Edit.Marshal(b[n:])
-	}
-	for _, atom := range self.Unknowns {
-		n += atom.Marshal(b[n:])
-	}
-	return
-}
-func (self Track) Len() (n int) {
-	n += 8
-	if self.Header != nil {
-		n += self.Header.Len()
-	}
-	if self.Media != nil {
-		n += self.Media.Len()
-	}
-	if self.Edit != nil {
-		n += self.Edit.Len()
-	}
-	for _, atom := range self.Unknowns {
-		n += atom.Len()
-	}
-	return
-}
-func (self *Track) Unmarshal(b []byte, offset int) (n int, err error) {
-	(&self.AtomPos).setPos(offset, len(b))
-	n += 8
-	for n+8 < len(b) {
-		tag := Tag(pio.U32BE(b[n+4:]))
-		size := int(pio.U32BE(b[n:]))
-		if len(b) < n+size {
-			err = parseErr("TagSizeInvalid", n+offset, err)
-			return
-		}
-		switch tag {
-		case TKHD:
-			{
-				atom := &TrackHeader{}
-				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
-					err = parseErr("tkhd", n+offset, err)
-					return
-				}
-				self.Header = atom
-			}
-		case MDIA:
-			{
-				atom := &Media{}
-				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
-					err = parseErr("mdia", n+offset, err)
-					return
-				}
-				self.Media = atom
-			}
-		case EDTS:
-			{
-				atom := &Edit{}
-				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
-					err = parseErr("edts", n+offset, err)
-					return
-				}
-				self.Edit = atom
-			}
-		default:
-			{
-				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
-				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
-					err = parseErr("", n+offset, err)
-					return
-				}
-				self.Unknowns = append(self.Unknowns, atom)
-			}
-		}
-		n += size
-	}
-	return
-}
-func (self Track) Children() (r []Atom) {
-	if self.Header != nil {
-		r = append(r, self.Header)
-	}
-	if self.Media != nil {
-		r = append(r, self.Media)
-	}
-	if self.Edit != nil {
-		r = append(r, self.Edit)
-	}
-	r = append(r, self.Unknowns...)
-	return
-}
-
 type Edit struct {
 	EditList *EditList
 	Unknowns []Atom
@@ -787,6 +677,117 @@ func PutEditListEntry(b []byte, self EditListEntry) {
 	pio.PutI32BE(b[0:], self.TrackDuration)
 	pio.PutI32BE(b[4:], self.MediaTime)
 	pio.PutU32BE(b[8:], self.MediaRate)
+}
+
+type Track struct {
+	Header   *TrackHeader
+	Media    *Media
+	Edit     *Edit
+	Unknowns []Atom
+	AtomPos
+}
+
+func (self Track) Marshal(b []byte) (n int) {
+	pio.PutU32BE(b[4:], uint32(TRAK))
+	n += self.marshal(b[8:]) + 8
+	pio.PutU32BE(b[0:], uint32(n))
+	return
+}
+func (self Track) marshal(b []byte) (n int) {
+	if self.Header != nil {
+		n += self.Header.Marshal(b[n:])
+	}
+	if self.Media != nil {
+		n += self.Media.Marshal(b[n:])
+	}
+	if self.Edit != nil {
+		n += self.Edit.Marshal(b[n:])
+	}
+	for _, atom := range self.Unknowns {
+		n += atom.Marshal(b[n:])
+	}
+	return
+}
+func (self Track) Len() (n int) {
+	n += 8
+	if self.Header != nil {
+		n += self.Header.Len()
+	}
+	if self.Media != nil {
+		n += self.Media.Len()
+	}
+	if self.Edit != nil {
+		n += self.Edit.Len()
+	}
+	for _, atom := range self.Unknowns {
+		n += atom.Len()
+	}
+	return
+}
+func (self *Track) Unmarshal(b []byte, offset int) (n int, err error) {
+	(&self.AtomPos).setPos(offset, len(b))
+	n += 8
+	for n+8 < len(b) {
+		tag := Tag(pio.U32BE(b[n+4:]))
+		size := int(pio.U32BE(b[n:]))
+		if len(b) < n+size {
+			err = parseErr("TagSizeInvalid", n+offset, err)
+			return
+		}
+		switch tag {
+		case TKHD:
+			{
+				atom := &TrackHeader{}
+				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
+					err = parseErr("tkhd", n+offset, err)
+					return
+				}
+				self.Header = atom
+			}
+		case MDIA:
+			{
+				atom := &Media{}
+				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
+					err = parseErr("mdia", n+offset, err)
+					return
+				}
+				self.Media = atom
+			}
+		case EDTS:
+			{
+				atom := &Edit{}
+				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
+					err = parseErr("edts", n+offset, err)
+					return
+				}
+				self.Edit = atom
+			}
+		default:
+			{
+				atom := &Dummy{Tag_: tag, Data: b[n : n+size]}
+				if _, err = atom.Unmarshal(b[n:n+size], offset+n); err != nil {
+					err = parseErr("", n+offset, err)
+					return
+				}
+				self.Unknowns = append(self.Unknowns, atom)
+			}
+		}
+		n += size
+	}
+	return
+}
+func (self Track) Children() (r []Atom) {
+	if self.Header != nil {
+		r = append(r, self.Header)
+	}
+	if self.Media != nil {
+		r = append(r, self.Media)
+	}
+	if self.Edit != nil {
+		r = append(r, self.Edit)
+	}
+	r = append(r, self.Unknowns...)
+	return
 }
 
 const LenEditListEntry = 12
